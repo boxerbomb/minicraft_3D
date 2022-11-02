@@ -50,3 +50,4 @@ typedef uint8_t u8;
 #define TILE_HARDROCK 19
 #define TILE_CLOUDCACTUS 20
 #define TILE_HOLE 21
+#define TILE_TREE_TRUNK 22

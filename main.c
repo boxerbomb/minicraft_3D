@@ -21,8 +21,8 @@
 #include "mapgen.h"
 
 // Holds the tile images
-Image tile_images[22];
-Texture2D tile_textures[22];
+Image tile_images[23];
+Texture2D tile_textures[23];
 
 Camera cameraPlayer1 = { 0 };
 float player1_theta = 0.0;
@@ -48,15 +48,23 @@ void DrawScene(RenderTexture *floor_texture)
 
     // Grid of cube trees on a plane to make a "world"
     //DrawPlane((Vector3){ SCREEN_WIDTH/2, -8.0f, SCREEN_HEIGHT/2 }, (Vector2){ 128*16, 128*16 }, BEIGE); // Simple world plane
-    DrawCubeTexture(floor_texture->texture,(Vector3) { (128*16)/2, -8.0f, (128*16)/2 }, 128*16, 0.01f, 128*16, WHITE);
+    DrawCubeTexture(floor_texture->texture,(Vector3) { (128*16)/2, -8.0f, (128*16)/2 }, 128*16, 0, 128*16, WHITE);
+
 
         for(int y=0; y<127; y++){
             for(int x=0; x<127; x++){       
                 u8 tile_index = map[1][((y+scroll_offset_y)*128)+(x+scroll_offset_x)];
                 //DrawTexture(tile_textures[tile_index], x*16, y*16, WHITE);
-                if(tile_index==TILE_TREE || tile_index==TILE_ROCK){
-                	DrawCubeTexture(tile_textures[tile_index],(Vector3) { (x*16)+(16/2), 1.0f, (y*16)+(16/2) }, 16, 16, 16, WHITE);
+
+                if(tile_index==TILE_TREE){
+                    DrawCubeTexture(tile_textures[TILE_TREE_TRUNK],(Vector3) { (x*16)+(16/2), -1.0f, (y*16)+(16/2) }, 8, 16, 8, WHITE);
+                    // Drawing these criss-cross trees drops the FPS a lot.
+                    DrawCubeTexture(tile_textures[TILE_TREE],(Vector3) { (x*16)+(16/2), 15.0f, (y*16)+(16/2) }, 20, 20, 0, WHITE);
+                    DrawCubeTexture(tile_textures[TILE_TREE],(Vector3) { (x*16)+(16/2), 15.0f, (y*16)+(16/2) }, 0, 20, 20, WHITE);
+                }else if(tile_index==TILE_ROCK){
+                	DrawCubeTexture(tile_textures[tile_index],(Vector3) { (x*16)+(16/2), -1.0f, (y*16)+(16/2) }, 16, 16, 16, WHITE);
                 }
+
                 
             }
         }
@@ -109,8 +117,6 @@ int main(void)
 
 
 
-
-
     tile_images[TILE_GRASS] = LoadImage("./res/grass.png");
     tile_images[TILE_TREE] = LoadImage("./res/tree.png");
     tile_images[TILE_ROCK] = LoadImage("./res/rock.png");
@@ -133,18 +139,19 @@ int main(void)
     tile_images[TILE_HARDROCK] = LoadImage("./res/hardrock.png");
     tile_images[TILE_CLOUDCACTUS] = LoadImage("./res/cloudcactus.png");
     tile_images[TILE_HOLE] = LoadImage("./res/hole.png");
+    tile_images[TILE_TREE_TRUNK] = LoadImage("./res/tree_trunk.png");
 
-    for(int i=0; i<22; i++){
+    for(int i=0; i<23; i++){
         tile_textures[i] = LoadTextureFromImage(tile_images[i]);
         UnloadImage(tile_images[i]);
     }
 
-    SetTargetFPS(60);               // Set our game to run at 60 frames-per-second
+    //SetTargetFPS(60);               // Set our game to run at 60 frames-per-second
     //--------------------------------------------------------------------------------------
 
     initNewMap();
 
-    /*
+    /*    
     //Uncomment to print maps to console
     for(int level=0; level<5; level++){
 
@@ -168,6 +175,22 @@ int main(void)
         printf("\n---------------------------------------------------------------------------------------------------------------------\n");
     }
     */
+    
+
+    // Draw the floor texture, this will be used by both screens
+    // For now, only the ground level, but later each level floor texture will need to be saved
+    BeginTextureMode(floor_texture);
+    BeginDrawing();
+    ClearBackground((Color){77,37,28,255});
+    for(int y=0; y<127; y++){
+        for(int x=0; x<127; x++){
+            u8 tile_index = map[1][((y+scroll_offset_y)*128)+(x+scroll_offset_x)];
+            DrawTexture(tile_textures[tile_index], x*16, y*16, WHITE);
+        }
+    }
+    EndDrawing();
+    EndTextureMode();
+
 
     // Main game loop
     while (!WindowShouldClose())    // Detect window close button or ESC key
@@ -232,19 +255,6 @@ float offsetThisFrame = 10.0f*GetFrameTime();
         //----------------------------------------------------------------------------------
 
 
-        BeginTextureMode(floor_texture);
-        BeginDrawing();
-        ClearBackground((Color){77,37,28});
-        for(int y=0; y<127; y++){
-            for(int x=0; x<127; x++){
-                u8 tile_index = map[1][((y+scroll_offset_y)*128)+(x+scroll_offset_x)];
-                DrawTexture(tile_textures[tile_index], x*16, y*16, WHITE);
-            }
-        }
-        EndDrawing();
-        EndTextureMode();
-
-
 
         // Draw Player1 view to the render texture
         BeginTextureMode(screenPlayer1);
@@ -252,7 +262,8 @@ float offsetThisFrame = 10.0f*GetFrameTime();
             BeginMode3D(cameraPlayer1);
                 DrawScene(&floor_texture);
             EndMode3D();
-            DrawText("PLAYER1 W/S to move", 10, 10, 20, RED);
+            //DrawText("PLAYER1 W/S to move", 10, 10, 20, RED);
+            DrawFPS(10, 10);  
         EndTextureMode();
 
         // Draw Player2 view to the render texture
@@ -261,7 +272,7 @@ float offsetThisFrame = 10.0f*GetFrameTime();
             BeginMode3D(cameraPlayer2);
                 DrawScene(&floor_texture);
             EndMode3D();
-            DrawText("PLAYER2 UP/DOWN to move", 10, 10, 20, BLUE);
+            //DrawText("PLAYER2 UP/DOWN to move", 10, 10, 20, BLUE);
         EndTextureMode();
 
         // Draw both views render textures to the screen side by side
