@@ -21,18 +21,17 @@
 #include "mapgen.h"
 
 // Holds the tile images
-Image tile_images[23];
-Texture2D tile_textures[23];
+Image tile_images[NUM_TILES];
+Texture2D tile_textures[NUM_TILES];
+struct TileData tile_data[NUM_TILES];
 
-Camera cameraPlayer1 = { 0 };
-float player1_theta = 0.0;
-Camera cameraPlayer2 = { 0 };
-float player2_theta = 0.0;
+struct PlayerData player_list[2];
+
 
 
 // Globals for map data
-u8 map[5][128*128];
-u8 data[5][128*128];
+u8 map[5][WORLD_SIZE*WORLD_SIZE];
+u8 data[5][WORLD_SIZE*WORLD_SIZE];
 
 u8 scroll_offset_x = 0;
 u8 scroll_offset_y = 0;
@@ -47,15 +46,16 @@ void DrawScene(RenderTexture *floor_texture)
 
 
     // Grid of cube trees on a plane to make a "world"
-    //DrawPlane((Vector3){ SCREEN_WIDTH/2, -8.0f, SCREEN_HEIGHT/2 }, (Vector2){ 128*16, 128*16 }, BEIGE); // Simple world plane
-    DrawCubeTexture(floor_texture->texture,(Vector3) { (128*16)/2, -8.0f, (128*16)/2 }, 128*16, 0, 128*16, WHITE);
+    //DrawPlane((Vector3){ SCREEN_WIDTH/2, -8.0f, SCREEN_HEIGHT/2 }, (Vector2){ WORLD_SIZE*16, WORLD_SIZE*16 }, BEIGE); // Simple world plane
+    DrawCubeTexture(floor_texture->texture,(Vector3) { (WORLD_SIZE*16)/2, -8.0f, (WORLD_SIZE*16)/2 }, WORLD_SIZE*16, 0, WORLD_SIZE*16, WHITE);
 
 
-        for(int y=0; y<127; y++){
-            for(int x=0; x<127; x++){       
-                u8 tile_index = map[1][((y+scroll_offset_y)*128)+(x+scroll_offset_x)];
+        for(int y=0; y<WORLD_SIZE; y++){
+            for(int x=0; x<WORLD_SIZE; x++){       
+                u8 tile_index = map[1][((y+scroll_offset_y)*WORLD_SIZE)+(x+scroll_offset_x)];
                 //DrawTexture(tile_textures[tile_index], x*16, y*16, WHITE);
 
+                /*
                 if(tile_index==TILE_TREE){
                     DrawCubeTexture(tile_textures[TILE_TREE_TRUNK],(Vector3) { (x*16)+(16/2), -1.0f, (y*16)+(16/2) }, 8, 16, 8, WHITE);
                     // Drawing these criss-cross trees drops the FPS a lot.
@@ -64,23 +64,63 @@ void DrawScene(RenderTexture *floor_texture)
                 }else if(tile_index==TILE_ROCK){
                 	DrawCubeTexture(tile_textures[tile_index],(Vector3) { (x*16)+(16/2), -1.0f, (y*16)+(16/2) }, 16, 16, 16, WHITE);
                 }
+                */  
+
+                // If the tile has been identified as one that is 3d (not a floor tile), draw it to screen
+                // There are special cases like the tree that are not cubes though
+                if(tile_data[tile_index].draw_3d == true){
+                    if(tile_index==TILE_TREE){
+                        DrawCubeTexture(tile_data[TILE_TREE_TRUNK].texture,(Vector3) { (x*16)+(16/2), -1.0f, (y*16)+(16/2) }, 8, 16, 8, WHITE);
+                        DrawCubeTexture(tile_data[TILE_TREE].texture,(Vector3) { (x*16)+(16/2), 15.0f, (y*16)+(16/2) }, 20, -20, 0, WHITE);
+                        DrawCubeTexture(tile_data[TILE_TREE].texture,(Vector3) { (x*16)+(16/2), 15.0f, (y*16)+(16/2) }, 0, -20, 20, WHITE);
+                    }else if(tile_index==TILE_CACTUS){
+                        DrawCubeTexture(tile_data[TILE_CACTUS_TRUNK].texture,(Vector3) { (x*16)+(16/2), -1.0f, (y*16)+(16/2) }, 6, 16, 6, WHITE);
+                    }else{
+                        DrawCubeTexture(tile_data[tile_index].texture,(Vector3) { (x*16)+(16/2), 0.1f, (y*16)+(16/2) }, 16, 16, 16, WHITE);
+                    }
+                }
+
+
 
                 
             }
         }
 
     // Draw a cube at each player's position
-    DrawCube(cameraPlayer1.position, 1, 1, 1, RED);
-    DrawCube(cameraPlayer2.position, 1, 1, 1, BLUE);
+    DrawCube(player_list[0].cam.position, 16, 16, 16, RED);
+    DrawCube(player_list[1].cam.position, 16, 16, 16, BLUE);
 }
 
 void initNewMap() {
     newSeed();
-    createAndValidateSkyMap(128, 128, map[0], data[0]);
-    createAndValidateTopMap(128, 128, map[1], data[1]);
-    createAndValidateUndergroundMap(128, 128, 1, map[2], data[2]);
-    createAndValidateUndergroundMap(128, 128, 2, map[3], data[3]);
-    createAndValidateUndergroundMap(128, 128, 3, map[4], data[4]);
+    createAndValidateSkyMap(WORLD_SIZE, WORLD_SIZE, map[0], data[0]);
+    createAndValidateTopMap(WORLD_SIZE, WORLD_SIZE, map[1], data[1]);
+    createAndValidateUndergroundMap(WORLD_SIZE, WORLD_SIZE, 1, map[2], data[2]);
+    createAndValidateUndergroundMap(WORLD_SIZE, WORLD_SIZE, 2, map[3], data[3]);
+    createAndValidateUndergroundMap(WORLD_SIZE, WORLD_SIZE, 3, map[4], data[4]);
+}
+
+
+// Unfortunetly it seems to be easier to use the player cameras position as the player position
+void setupPlayers(){
+    for(int i=0; i<NUM_PLAYERS; i++){
+
+        //Init Camera
+        //player_list[i].cam = { 0 };
+        // Camera starting position
+        player_list[i].cam.fovy = 45.0f;
+        player_list[i].cam.up.y = 1.0f;
+        player_list[i].cam.target.y = 1.0f;
+        player_list[i].cam.position.z = -3.0f;
+        player_list[i].cam.position.y = 1.0f;
+
+        // This is the canvas that the players screen will be drawn on
+        // These are screen sizes not screen position
+        // 4 player will require different sized screens
+        player_list[i].screen = LoadRenderTexture(SCREEN_WIDTH/2, SCREEN_HEIGHT);
+
+        player_list[i].theta = 0;
+    }
 }
 
 //------------------------------------------------------------------------------------
@@ -92,27 +132,16 @@ int main(void)
     //--------------------------------------------------------------------------------------
 
 
-    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "raylib [core] example - keyboard input");
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Minicraft 3D");
 
 
-    RenderTexture floor_texture = LoadRenderTexture(128*16, 128*16);
+    RenderTexture floor_texture = LoadRenderTexture(WORLD_SIZE*16, WORLD_SIZE*16);
 
-	// Setup player 1 camera and screen
-	cameraPlayer1.fovy = 45.0f;
-	cameraPlayer1.up.y = 1.0f;
-	cameraPlayer1.target.y = 1.0f;
-	cameraPlayer1.position.z = -3.0f;
-	cameraPlayer1.position.y = 1.0f;
-	RenderTexture screenPlayer1 = LoadRenderTexture(SCREEN_WIDTH/2, SCREEN_HEIGHT);
-	// Setup player two camera and screen
-	cameraPlayer2.fovy = 45.0f;
-	cameraPlayer2.up.y = 1.0f;
-	cameraPlayer2.target.y = 1.0f;
-	cameraPlayer2.position.x = -3.0f;
-	cameraPlayer2.position.y = 1.0f;
-	RenderTexture screenPlayer2 = LoadRenderTexture(SCREEN_WIDTH / 2, SCREEN_HEIGHT);
 
-	Rectangle splitScreenRect = { 0.0f, 0.0f, (float)screenPlayer1.texture.width, (float)-screenPlayer1.texture.height };
+    setupPlayers();
+
+    // This is the Rectangle representing the position and size of our 2-player split screen, this will need to be changed for 4-players
+	Rectangle splitScreenRect = { 0.0f, 0.0f, (float)player_list[0].screen.texture.width, (float)-player_list[0].screen.texture.height };
 
 
 
@@ -140,8 +169,70 @@ int main(void)
     tile_images[TILE_CLOUDCACTUS] = LoadImage("./res/cloudcactus.png");
     tile_images[TILE_HOLE] = LoadImage("./res/hole.png");
     tile_images[TILE_TREE_TRUNK] = LoadImage("./res/tree_trunk.png");
+    tile_images[TILE_CACTUS_TRUNK] = LoadImage("./res/cactus_trunk.png");
 
-    for(int i=0; i<23; i++){
+
+    for(int i=0; i<NUM_TILES; i++){
+        struct TileData new_tile_data;
+        new_tile_data.tile_index = i;
+        new_tile_data.minimap_color = 0;
+
+        // Needed to prevent Raylib from drawing textures upseide down
+        ImageFlipVertical(&tile_images[i]);
+        new_tile_data.texture = LoadTextureFromImage(tile_images[i]);
+
+        if(i==TILE_GRASS){
+            new_tile_data.draw_3d = false;
+        }else if(i==TILE_TREE){
+            new_tile_data.draw_3d = true;
+        }else if(i==TILE_ROCK){
+            new_tile_data.draw_3d = true;
+        }else if(i==TILE_DIRT){
+            new_tile_data.draw_3d = false;
+        }else if(i==TILE_SAND){
+            new_tile_data.draw_3d = false;
+        }else if(i==TILE_WATER){
+            new_tile_data.draw_3d = false;
+        }else if(i==TILE_LAVA){
+            new_tile_data.draw_3d = false;
+        }else if(i==TILE_CACTUS){
+            new_tile_data.draw_3d = true;
+        }else if(i==TILE_FLOWER){
+            new_tile_data.draw_3d = true;
+        }else if(i==TILE_IRONORE){
+            new_tile_data.draw_3d = true;
+        }else if(i==TILE_GOLDORE){
+            new_tile_data.draw_3d = true;
+        }else if(i==TILE_GEMORE){
+            new_tile_data.draw_3d = true;
+        }else if(i==TILE_FARM){
+            new_tile_data.draw_3d = false;
+        }else if(i==TILE_WHEAT){
+            new_tile_data.draw_3d = true;
+        }else if(i==TILE_SAPLING_TREE){
+            new_tile_data.draw_3d = true;
+        }else if(i==TILE_SAPLING_CACTUS){
+            new_tile_data.draw_3d = true;
+        }else if(i==TILE_STAIRS_DOWN){
+            new_tile_data.draw_3d = true;
+        }else if(i==TILE_CLOUD){
+            new_tile_data.draw_3d = false;
+        }else if(i==TILE_HARDROCK){
+            new_tile_data.draw_3d = false;
+        }else if(i==TILE_CLOUDCACTUS){
+            new_tile_data.draw_3d = false;
+        }else if(i==TILE_HOLE){
+            new_tile_data.draw_3d = false;
+        }else if(i==TILE_TREE_TRUNK){
+            new_tile_data.draw_3d = true;
+        }else if(i==TILE_CACTUS_TRUNK){
+            new_tile_data.draw_3d = true;
+        }else{
+            printf("ERROR\n");
+        }
+
+        tile_data[i] = new_tile_data;
+
         tile_textures[i] = LoadTextureFromImage(tile_images[i]);
         UnloadImage(tile_images[i]);
     }
@@ -155,9 +246,9 @@ int main(void)
     //Uncomment to print maps to console
     for(int level=0; level<5; level++){
 
-        for(int y=0; y<127; y++){
-            for(int x=0; x<127; x++){
-                u8 tile_index = map[level][(y*128)+x];
+        for(int y=0; y<WORLD_SIZE; y++){
+            for(int x=0; x<WORLD_SIZE; x++){
+                u8 tile_index = map[level][(y*WORLD_SIZE)+x];
                 if(tile_index == TILE_GRASS){
                     printf("#");
                 }else if(tile_index == TILE_ROCK){
@@ -182,10 +273,15 @@ int main(void)
     BeginTextureMode(floor_texture);
     BeginDrawing();
     ClearBackground((Color){77,37,28,255});
-    for(int y=0; y<127; y++){
-        for(int x=0; x<127; x++){
-            u8 tile_index = map[1][((y+scroll_offset_y)*128)+(x+scroll_offset_x)];
-            DrawTexture(tile_textures[tile_index], x*16, y*16, WHITE);
+    for(int y=0; y<WORLD_SIZE; y++){
+        for(int x=0; x<WORLD_SIZE; x++){
+            u8 tile_index = map[1][((y+scroll_offset_y)*WORLD_SIZE)+(x+scroll_offset_x)];
+
+            // Only Draw the texture to the floor, if it is a floor tile and not a 3D object
+            if(tile_data[tile_index].draw_3d==false){
+                DrawTexture(tile_textures[tile_index], x*16, y*16, WHITE);
+            }
+            
         }
     }
     EndDrawing();
@@ -202,64 +298,68 @@ float offsetThisFrame = 10.0f*GetFrameTime();
         // Move Player1 forward and backwards (no turning)
         if (IsKeyDown(KEY_W))
         {
-            cameraPlayer1.position.z += PLAYER_SPEED*offsetThisFrame*cos(player1_theta);
-            cameraPlayer1.position.x += PLAYER_SPEED*offsetThisFrame*sin(player1_theta);
-            cameraPlayer1.target.x = cameraPlayer1.position.x + sin(player1_theta);
-            cameraPlayer1.target.z = cameraPlayer1.position.z + cos(player1_theta);
+            player_list[0].cam.position.z += PLAYER_SPEED*offsetThisFrame*cos(player_list[0].theta);
+            player_list[0].cam.position.x += PLAYER_SPEED*offsetThisFrame*sin(player_list[0].theta);
+            player_list[0].cam.target.x = player_list[0].cam.position.x + sin(player_list[0].theta);
+            player_list[0].cam.target.z = player_list[0].cam.position.z + cos(player_list[0].theta);
         }
         else if (IsKeyDown(KEY_S))
         {
-            cameraPlayer1.position.z -= PLAYER_SPEED*offsetThisFrame*cos(player1_theta);
-            cameraPlayer1.position.x -= PLAYER_SPEED*offsetThisFrame*sin(player1_theta);
-            cameraPlayer1.target.x = cameraPlayer1.position.x + sin(player1_theta);
-            cameraPlayer1.target.z = cameraPlayer1.position.z + cos(player1_theta);
-        }else if (IsKeyDown(KEY_A))
-        {
-            player1_theta += (offsetThisFrame*0.2);
-            cameraPlayer1.target.x = cameraPlayer1.position.x + sin(player1_theta);
-            cameraPlayer1.target.z = cameraPlayer1.position.z + cos(player1_theta);
+            player_list[0].cam.position.z -= PLAYER_SPEED*offsetThisFrame*cos(player_list[0].theta);
+            player_list[0].cam.position.x -= PLAYER_SPEED*offsetThisFrame*sin(player_list[0].theta);
+            player_list[0].cam.target.x = player_list[0].cam.position.x + sin(player_list[0].theta);
+            player_list[0].cam.target.z = player_list[0].cam.position.z + cos(player_list[0].theta);
+        }
+        if (IsKeyDown(KEY_A)){
+            player_list[0].theta += (offsetThisFrame*0.2);
+            player_list[0].cam.target.x = player_list[0].cam.position.x + sin(player_list[0].theta);
+            player_list[0].cam.target.z = player_list[0].cam.position.z + cos(player_list[0].theta);
 
         }else if (IsKeyDown(KEY_D))
         {
-            player1_theta -= (offsetThisFrame*0.2);
-            cameraPlayer1.target.x = cameraPlayer1.position.x + sin(player1_theta);
-            cameraPlayer1.target.z = cameraPlayer1.position.z + cos(player1_theta);
+
+            player_list[0].theta -= (offsetThisFrame*0.2);
+            player_list[0].cam.target.x = player_list[0].cam.position.x + sin(player_list[0].theta);
+            player_list[0].cam.target.z = player_list[0].cam.position.z + cos(player_list[0].theta);
         }
+
+
 
         // Move Player2 forward and backwards (no turning)
         if (IsKeyDown(KEY_UP))
         {
-            cameraPlayer2.position.z += PLAYER_SPEED*offsetThisFrame*cos(player2_theta);
-            cameraPlayer2.position.x += PLAYER_SPEED*offsetThisFrame*sin(player2_theta);
-            cameraPlayer2.target.x = cameraPlayer2.position.x + sin(player2_theta);
-            cameraPlayer2.target.z = cameraPlayer2.position.z + cos(player2_theta);
+            player_list[1].cam.position.z += PLAYER_SPEED*offsetThisFrame*cos(player_list[1].theta);
+            player_list[1].cam.position.x += PLAYER_SPEED*offsetThisFrame*sin(player_list[1].theta);
+            player_list[1].cam.target.x = player_list[1].cam.position.x + sin(player_list[1].theta);
+            player_list[1].cam.target.z = player_list[1].cam.position.z + cos(player_list[1].theta);
         }
         else if (IsKeyDown(KEY_DOWN))
         {
-            cameraPlayer2.position.z -= PLAYER_SPEED*offsetThisFrame*cos(player2_theta);
-            cameraPlayer2.position.x -= PLAYER_SPEED*offsetThisFrame*sin(player2_theta);
-            cameraPlayer2.target.x = cameraPlayer2.position.x + sin(player2_theta);
-            cameraPlayer2.target.z = cameraPlayer2.position.z + cos(player2_theta);
-        }else if (IsKeyDown(KEY_LEFT))
+            player_list[1].cam.position.z -= PLAYER_SPEED*offsetThisFrame*cos(player_list[1].theta);
+            player_list[1].cam.position.x -= PLAYER_SPEED*offsetThisFrame*sin(player_list[1].theta);
+            player_list[1].cam.target.x = player_list[1].cam.position.x + sin(player_list[1].theta);
+            player_list[1].cam.target.z = player_list[1].cam.position.z + cos(player_list[1].theta);
+        }
+        if (IsKeyDown(KEY_LEFT))
         {
-            player2_theta += (offsetThisFrame*0.2);
-            cameraPlayer2.target.x = cameraPlayer2.position.x + sin(player2_theta);
-            cameraPlayer2.target.z = cameraPlayer2.position.z + cos(player2_theta);
+            player_list[1].theta += (offsetThisFrame*0.2);
+            player_list[1].cam.target.x = player_list[1].cam.position.x + sin(player_list[1].theta);
+            player_list[1].cam.target.z = player_list[1].cam.position.z + cos(player_list[1].theta);
 
         }else if (IsKeyDown(KEY_RIGHT))
         {
-            player2_theta -= (offsetThisFrame*0.2);
-            cameraPlayer2.target.x = cameraPlayer2.position.x + sin(player2_theta);
-            cameraPlayer2.target.z = cameraPlayer2.position.z + cos(player2_theta);
+            player_list[1].theta -= (offsetThisFrame*0.2);
+            player_list[1].cam.target.x = player_list[1].cam.position.x + sin(player_list[1].theta);
+            player_list[1].cam.target.z = player_list[1].cam.position.z + cos(player_list[1].theta);
         }
         //----------------------------------------------------------------------------------
 
 
 
         // Draw Player1 view to the render texture
-        BeginTextureMode(screenPlayer1);
+        BeginTextureMode(player_list[0].screen);
             ClearBackground(SKYBLUE);
-            BeginMode3D(cameraPlayer1);
+            BeginMode3D(player_list[0].cam);
                 DrawScene(&floor_texture);
             EndMode3D();
             //DrawText("PLAYER1 W/S to move", 10, 10, 20, RED);
@@ -267,9 +367,9 @@ float offsetThisFrame = 10.0f*GetFrameTime();
         EndTextureMode();
 
         // Draw Player2 view to the render texture
-        BeginTextureMode(screenPlayer2);
+        BeginTextureMode(player_list[1].screen);
             ClearBackground(SKYBLUE);
-            BeginMode3D(cameraPlayer2);
+            BeginMode3D(player_list[1].cam);
                 DrawScene(&floor_texture);
             EndMode3D();
             //DrawText("PLAYER2 UP/DOWN to move", 10, 10, 20, BLUE);
@@ -278,8 +378,8 @@ float offsetThisFrame = 10.0f*GetFrameTime();
         // Draw both views render textures to the screen side by side
         BeginDrawing();
             ClearBackground(BLACK);
-            DrawTextureRec(screenPlayer1.texture, splitScreenRect, (Vector2){ 0, 0 }, WHITE);
-            DrawTextureRec(screenPlayer2.texture, splitScreenRect, (Vector2){ SCREEN_WIDTH/2.0f, 0 }, WHITE);
+            DrawTextureRec(player_list[0].screen.texture, splitScreenRect, (Vector2){ 0, 0 }, WHITE);
+            DrawTextureRec(player_list[1].screen.texture, splitScreenRect, (Vector2){ SCREEN_WIDTH/2.0f, 0 }, WHITE);
         EndDrawing();
 
 

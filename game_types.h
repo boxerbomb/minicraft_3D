@@ -1,16 +1,29 @@
 #include <stdint.h>
+#include "raylib.h"
 
 struct TileData{
 	int tile_index;
-	int height;
+	bool draw_3d;
+	int minimap_color;
+	Texture2D texture;
+};
+
+struct PlayerData{
+	Camera cam;
+	Color playerColor;
+	float theta;
+	RenderTexture screen;
 };
 
 typedef uint8_t u8;
 
+#define NUM_PLAYERS 2
 #define PLAYER_SPEED 40
 
 #define SCREEN_HEIGHT 800
 #define SCREEN_WIDTH 1600
+
+#define WORLD_SIZE 128
 
 #define MENU_NONE 0
 #define MENU_TITLE 1
@@ -51,3 +64,5 @@ typedef uint8_t u8;
 #define TILE_CLOUDCACTUS 20
 #define TILE_HOLE 21
 #define TILE_TREE_TRUNK 22
+#define TILE_CACTUS_TRUNK 23
+#define NUM_TILES 24
