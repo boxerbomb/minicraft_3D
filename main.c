@@ -33,9 +33,90 @@ struct PlayerData player_list[2];
 u8 map[5][WORLD_SIZE*WORLD_SIZE];
 u8 data[5][WORLD_SIZE*WORLD_SIZE];
 
-u8 scroll_offset_x = 0;
-u8 scroll_offset_y = 0;
 
+bool FindPoint(int x1, int y1, int x2, int y2, int x, int y)
+{
+    if (x > x1 && x < x2 && y > y1 && y < y2)
+        return true;
+ 
+    return false;
+}
+
+bool inChunk(struct Position chunkPos, struct Position player_pos){
+    int realX1 = chunkPos.x*(CHUNK_SIZE*CHUNK_SIZE);
+    int realY1 = chunkPos.y*(CHUNK_SIZE*CHUNK_SIZE);
+    int realX2 = (chunkPos.x+1)*(CHUNK_SIZE*CHUNK_SIZE);
+    int realY2 = (chunkPos.y+1)*(CHUNK_SIZE*CHUNK_SIZE);
+
+
+    if (player_pos.x > realX1 && player_pos.x < realX2 && player_pos.y > realY1 && player_pos.y < realY2){
+        return true;
+    }
+ 
+    return false;
+
+}
+
+bool inTriangle(struct Position p1,struct Position p2,struct Position p3,struct Position test_point){
+    float alpha = ((p2.y - p3.y)*(test_point.x - p3.x) + (p3.x - p2.x)*(test_point.y - p3.y)) / ((p2.y - p3.y)*(p1.x - p3.x) + (p3.x - p2.x)*(p1.y - p3.y));
+    float beta = ((p3.y - p1.y)*(test_point.x - p3.x) + (p1.x - p3.x)*(test_point.y - p3.y)) / ((p2.y - p3.y)*(p1.x - p3.x) + (p3.x - p2.x)*(p1.y - p3.y));
+    float gamma = 1.0 - alpha - beta;
+
+    if (alpha>0 && beta>0 && gamma>0){
+        return true;
+    }else{
+        return false;
+    }
+}
+
+float to_Radians(int degree){
+    return degree * ( C_PI / 180.0 );  
+}
+
+bool renderChunk(struct Position chunk_pos){
+
+    bool isSeen=false;
+
+    struct Position left_top_pos = {chunk_pos.x*(BLOCK_SIZE*CHUNK_SIZE),chunk_pos.y*(BLOCK_SIZE*CHUNK_SIZE)};
+    struct Position right_top_pos = {(chunk_pos.x+1)*(BLOCK_SIZE*CHUNK_SIZE),chunk_pos.y*(BLOCK_SIZE*CHUNK_SIZE)};
+    struct Position left_bottom_pos = {chunk_pos.x*(BLOCK_SIZE*CHUNK_SIZE),(chunk_pos.y+1)*(BLOCK_SIZE*CHUNK_SIZE)};
+    struct Position right_bottom_pos = {(chunk_pos.x+1)*(BLOCK_SIZE*CHUNK_SIZE),(chunk_pos.y+1)*(BLOCK_SIZE*CHUNK_SIZE)};
+    //struct Position middle_pos = {chunk_pos.x*(BLOCK_SIZE*CHUNK_SIZE),chunk_pos.y*(BLOCK_SIZE*CHUNK_SIZE)};
+
+    // left_top_pos = (x*(BLOCK_SIZE*CHUNK_SIZE),y*(BLOCK_SIZE*CHUNK_SIZE))
+    // right_top_pos = ((x+1)*(BLOCK_SIZE*CHUNK_SIZE),y*(BLOCK_SIZE*CHUNK_SIZE))
+    // left_bottom_pos = (x*(BLOCK_SIZE*CHUNK_SIZE),(y+1)*(BLOCK_SIZE*CHUNK_SIZE))
+    // right_bottom_pos = ((x+1)*(BLOCK_SIZE*CHUNK_SIZE),(y+1)*(BLOCK_SIZE*CHUNK_SIZE))
+    //      if inTriangle( (player1X,player1Y),left_FOV,right_FOV,left_top_pos) or inTriangle( (player1X,player1Y),left_FOV,right_FOV,right_top_pos) or inTriangle( (player1X,player1Y),left_FOV,right_FOV,left_bottom_pos) or inTriangle( (player1X,player1Y),left_FOV,right_FOV,right_bottom_pos):
+    // is_seen = True
+
+
+    //left_FOV = (player1X+(VIEW_DISTANCE*math.cos(to_Radians(player1_theta-(FOV_ANGLE/2))))  ,player1Y+(VIEW_DISTANCE*math.sin(to_Radians(player1_theta-(FOV_ANGLE/2)))))
+    //right_FOV = (player1X+(VIEW_DISTANCE*math.cos(to_Radians(player1_theta+(FOV_ANGLE/2))))  ,player1Y+(VIEW_DISTANCE*math.sin(to_Radians(player1_theta+(FOV_ANGLE/2)))))
+
+    for(int player_id=0; player_id<NUM_PLAYERS; player_id++){
+        //struct Position player_pos = {player_list[player_id].cam.position.x - 64*sin(to_Radians(player_list[player_id].theta)), player_list[player_id].cam.position.z- 64*cos(to_Radians(player_list[player_id].theta))};
+        struct Position player_pos = {player_list[player_id].cam.position.x, player_list[player_id].cam.position.z};
+        struct Position left_FOV = {player_list[player_id].cam.position.x+(VIEW_DISTANCE* sin(to_Radians(player_list[player_id].theta - (CHUNK_LOAD_FOV/2))))  , player_list[player_id].cam.position.z+(VIEW_DISTANCE * cos(to_Radians(player_list[player_id].theta - (CHUNK_LOAD_FOV/2))))};
+        struct Position right_FOV = {player_list[player_id].cam.position.x+(VIEW_DISTANCE* sin(to_Radians(player_list[player_id].theta + (CHUNK_LOAD_FOV/2)))) , player_list[player_id].cam.position.z+(VIEW_DISTANCE * cos(to_Radians(player_list[player_id].theta + (CHUNK_LOAD_FOV/2))))};
+
+
+        DrawCube((Vector3){left_FOV.x,10,left_FOV.y}, PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_WIDTH, GREEN);
+        DrawCube((Vector3){right_FOV.x,10,right_FOV.y}, PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_WIDTH, PURPLE);
+        DrawCube((Vector3){player_pos.x,20,player_pos.y}, PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_WIDTH, ORANGE);
+
+
+        if(inChunk(chunk_pos,player_pos) || inTriangle(player_pos, left_FOV, right_FOV, left_top_pos) || inTriangle(player_pos, left_FOV, right_FOV, right_top_pos) || inTriangle(player_pos, left_FOV, right_FOV, left_bottom_pos) || inTriangle(player_pos, left_FOV, right_FOV, right_bottom_pos)){
+            isSeen = true;
+            //DrawCube((Vector3){left_top_pos.x,20,left_top_pos.y}, PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_WIDTH, RED);
+            //DrawCube((Vector3){right_top_pos.x,20,right_top_pos.y}, PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_WIDTH, RED);
+            //DrawCube((Vector3){left_bottom_pos.x,20,left_bottom_pos.y}, PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_WIDTH, RED);
+            //DrawCube((Vector3){right_bottom_pos.x,20,right_bottom_pos.y}, PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_WIDTH, RED);
+        }
+    }
+
+    return isSeen;
+}
 
 // Scene drawing
 void DrawScene(RenderTexture *floor_texture)
@@ -45,50 +126,66 @@ void DrawScene(RenderTexture *floor_texture)
     //wall_tex = LoadTextureFromImage(wall_image);
 
 
+    // This implementation is a first proof-of-concept for a chunk loading system
+    // Every chunk in the world will be checked EVERY FRAME, the next interation might check for chunks every 10 frames or so adding to a list and then only draw the selected ones here
+
+
+
     // Grid of cube trees on a plane to make a "world"
     //DrawPlane((Vector3){ SCREEN_WIDTH/2, -8.0f, SCREEN_HEIGHT/2 }, (Vector2){ WORLD_SIZE*16, WORLD_SIZE*16 }, BEIGE); // Simple world plane
-    DrawCubeTexture(floor_texture->texture,(Vector3) { (WORLD_SIZE*16)/2, -8.0f, (WORLD_SIZE*16)/2 }, WORLD_SIZE*16, 0, WORLD_SIZE*16, WHITE);
+    DrawCubeTexture(floor_texture->texture,(Vector3) { (WORLD_SIZE*BLOCK_SIZE)/2, -8.0f, (WORLD_SIZE*BLOCK_SIZE)/2 }, WORLD_SIZE*BLOCK_SIZE, 0, WORLD_SIZE*BLOCK_SIZE, WHITE);
 
 
-        for(int y=0; y<WORLD_SIZE; y++){
-            for(int x=0; x<WORLD_SIZE; x++){       
-                u8 tile_index = map[1][((y+scroll_offset_y)*WORLD_SIZE)+(x+scroll_offset_x)];
-                //DrawTexture(tile_textures[tile_index], x*16, y*16, WHITE);
+        for(int y=0; y<NUM_CHUNKS; y++){
+            for(int x=0; x<NUM_CHUNKS; x++){
+                struct Position chunkPos = {x,y};
+                if(renderChunk(chunkPos)){
+                    for(int ay=0; ay<CHUNK_SIZE; ay++){
+                        for(int ax=0; ax<CHUNK_SIZE; ax++){
 
-                /*
-                if(tile_index==TILE_TREE){
-                    DrawCubeTexture(tile_textures[TILE_TREE_TRUNK],(Vector3) { (x*16)+(16/2), -1.0f, (y*16)+(16/2) }, 8, 16, 8, WHITE);
-                    // Drawing these criss-cross trees drops the FPS a lot.
-                    DrawCubeTexture(tile_textures[TILE_TREE],(Vector3) { (x*16)+(16/2), 15.0f, (y*16)+(16/2) }, 20, 20, 0, WHITE);
-                    DrawCubeTexture(tile_textures[TILE_TREE],(Vector3) { (x*16)+(16/2), 15.0f, (y*16)+(16/2) }, 0, 20, 20, WHITE);
-                }else if(tile_index==TILE_ROCK){
-                	DrawCubeTexture(tile_textures[tile_index],(Vector3) { (x*16)+(16/2), -1.0f, (y*16)+(16/2) }, 16, 16, 16, WHITE);
-                }
-                */  
+                            int actual_y = ((y*CHUNK_SIZE)+ay);
+                            int actual_x = ((x*CHUNK_SIZE)+ax);
+                            u8 tile_index = map[1][(((y*CHUNK_SIZE)+ay)*WORLD_SIZE)+((x*CHUNK_SIZE)+ax)];
+                            //DrawTexture(tile_textures[tile_index], x*16, y*16, WHITE);
 
-                // If the tile has been identified as one that is 3d (not a floor tile), draw it to screen
-                // There are special cases like the tree that are not cubes though
-                if(tile_data[tile_index].draw_3d == true){
-                    if(tile_index==TILE_TREE){
-                        DrawCubeTexture(tile_data[TILE_TREE_TRUNK].texture,(Vector3) { (x*16)+(16/2), -1.0f, (y*16)+(16/2) }, 8, 16, 8, WHITE);
-                        DrawCubeTexture(tile_data[TILE_TREE].texture,(Vector3) { (x*16)+(16/2), 15.0f, (y*16)+(16/2) }, 20, -20, 0, WHITE);
-                        DrawCubeTexture(tile_data[TILE_TREE].texture,(Vector3) { (x*16)+(16/2), 15.0f, (y*16)+(16/2) }, 0, -20, 20, WHITE);
-                    }else if(tile_index==TILE_CACTUS){
-                        DrawCubeTexture(tile_data[TILE_CACTUS_TRUNK].texture,(Vector3) { (x*16)+(16/2), -1.0f, (y*16)+(16/2) }, 6, 16, 6, WHITE);
-                    }else{
-                        DrawCubeTexture(tile_data[tile_index].texture,(Vector3) { (x*16)+(16/2), 0.1f, (y*16)+(16/2) }, 16, 16, 16, WHITE);
+                            /*
+                            if(tile_index==TILE_TREE){
+                                DrawCubeTexture(tile_textures[TILE_TREE_TRUNK],(Vector3) { (x*16)+(16/2), -1.0f, (y*16)+(16/2) }, 8, 16, 8, WHITE);
+                                // Drawing these criss-cross trees drops the FPS a lot.
+                                DrawCubeTexture(tile_textures[TILE_TREE],(Vector3) { (x*16)+(16/2), 15.0f, (y*16)+(16/2) }, 20, 20, 0, WHITE);
+                                DrawCubeTexture(tile_textures[TILE_TREE],(Vector3) { (x*16)+(16/2), 15.0f, (y*16)+(16/2) }, 0, 20, 20, WHITE);
+                            }else if(tile_index==TILE_ROCK){
+                                DrawCubeTexture(tile_textures[tile_index],(Vector3) { (x*16)+(16/2), -1.0f, (y*16)+(16/2) }, 16, 16, 16, WHITE);
+                            }
+                            */  
+
+                            // If the tile has been identified as one that is 3d (not a floor tile), draw it to screen
+                            // There are special cases like the tree that are not cubes though
+                            if(tile_data[tile_index].draw_3d == true){
+                                if(tile_index==TILE_TREE){
+                                    DrawCubeTexture(tile_data[TILE_TREE_TRUNK].texture,(Vector3) { (actual_x*BLOCK_SIZE)+(BLOCK_SIZE/2), -1.0f, (actual_y*BLOCK_SIZE)+(BLOCK_SIZE/2) }, BLOCK_SIZE/2, BLOCK_SIZE, BLOCK_SIZE/2, WHITE);
+                                    DrawCubeTexture(tile_data[TILE_TREE].texture,(Vector3) { (actual_x*BLOCK_SIZE)+(BLOCK_SIZE/2), 15.0f, (actual_y*BLOCK_SIZE)+(BLOCK_SIZE/2) }, 20, -20, 0, WHITE);
+                                    DrawCubeTexture(tile_data[TILE_TREE].texture,(Vector3) { (actual_x*BLOCK_SIZE)+(BLOCK_SIZE/2), 15.0f, (actual_y*BLOCK_SIZE)+(BLOCK_SIZE/2) }, 0, -20, 20, WHITE);
+                                }else if(tile_index==TILE_CACTUS){
+                                    DrawCubeTexture(tile_data[TILE_CACTUS_TRUNK].texture,(Vector3) { (actual_x*BLOCK_SIZE)+(BLOCK_SIZE/2), -1.0f, (actual_y*BLOCK_SIZE)+(BLOCK_SIZE/2) }, 6, BLOCK_SIZE, 6, WHITE);
+                                }else{
+                                    DrawCubeTexture(tile_data[tile_index].texture,(Vector3) { (actual_x*BLOCK_SIZE)+(BLOCK_SIZE/2), 0.1f, (actual_y*BLOCK_SIZE)+(BLOCK_SIZE/2) }, BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE, WHITE);
+                                }
+                            }
+
+                        }
                     }
                 }
 
-
-
-                
             }
         }
 
+
+
+
     // Draw a cube at each player's position
-    DrawCube(player_list[0].cam.position, 16, 16, 16, RED);
-    DrawCube(player_list[1].cam.position, 16, 16, 16, BLUE);
+    DrawCube(player_list[0].cam.position, PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_WIDTH, RED);
+    DrawCube(player_list[1].cam.position, PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_WIDTH, BLUE);
 }
 
 void initNewMap() {
@@ -108,7 +205,7 @@ void setupPlayers(){
         //Init Camera
         //player_list[i].cam = { 0 };
         // Camera starting position
-        player_list[i].cam.fovy = 45.0f;
+        player_list[i].cam.fovy = PLAYER_FOV;
         player_list[i].cam.up.y = 1.0f;
         player_list[i].cam.target.y = 1.0f;
         player_list[i].cam.position.z = -3.0f;
@@ -135,7 +232,7 @@ int main(void)
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Minicraft 3D");
 
 
-    RenderTexture floor_texture = LoadRenderTexture(WORLD_SIZE*16, WORLD_SIZE*16);
+    RenderTexture floor_texture = LoadRenderTexture(WORLD_SIZE*BLOCK_SIZE, WORLD_SIZE*BLOCK_SIZE);
 
 
     setupPlayers();
@@ -275,11 +372,11 @@ int main(void)
     ClearBackground((Color){77,37,28,255});
     for(int y=0; y<WORLD_SIZE; y++){
         for(int x=0; x<WORLD_SIZE; x++){
-            u8 tile_index = map[1][((y+scroll_offset_y)*WORLD_SIZE)+(x+scroll_offset_x)];
+            u8 tile_index = map[1][((y)*WORLD_SIZE)+(x)];
 
             // Only Draw the texture to the floor, if it is a floor tile and not a 3D object
             if(tile_data[tile_index].draw_3d==false){
-                DrawTexture(tile_textures[tile_index], x*16, y*16, WHITE);
+                DrawTexture(tile_textures[tile_index], x*BLOCK_SIZE, y*BLOCK_SIZE, WHITE);
             }
             
         }
@@ -298,29 +395,34 @@ float offsetThisFrame = 10.0f*GetFrameTime();
         // Move Player1 forward and backwards (no turning)
         if (IsKeyDown(KEY_W))
         {
-            player_list[0].cam.position.z += PLAYER_SPEED*offsetThisFrame*cos(player_list[0].theta);
-            player_list[0].cam.position.x += PLAYER_SPEED*offsetThisFrame*sin(player_list[0].theta);
-            player_list[0].cam.target.x = player_list[0].cam.position.x + sin(player_list[0].theta);
-            player_list[0].cam.target.z = player_list[0].cam.position.z + cos(player_list[0].theta);
+            player_list[0].cam.position.z += PLAYER_SPEED*offsetThisFrame*cos(to_Radians(player_list[0].theta));
+            player_list[0].cam.position.x += PLAYER_SPEED*offsetThisFrame*sin(to_Radians(player_list[0].theta));
+            player_list[0].cam.target.x = player_list[0].cam.position.x + sin(to_Radians(player_list[0].theta));
+            player_list[0].cam.target.z = player_list[0].cam.position.z + cos(to_Radians(player_list[0].theta));
         }
         else if (IsKeyDown(KEY_S))
         {
-            player_list[0].cam.position.z -= PLAYER_SPEED*offsetThisFrame*cos(player_list[0].theta);
-            player_list[0].cam.position.x -= PLAYER_SPEED*offsetThisFrame*sin(player_list[0].theta);
-            player_list[0].cam.target.x = player_list[0].cam.position.x + sin(player_list[0].theta);
-            player_list[0].cam.target.z = player_list[0].cam.position.z + cos(player_list[0].theta);
+            player_list[0].cam.position.z -= PLAYER_SPEED*offsetThisFrame*cos(to_Radians(player_list[0].theta));
+            player_list[0].cam.position.x -= PLAYER_SPEED*offsetThisFrame*sin(to_Radians(player_list[0].theta));
+            player_list[0].cam.target.x = player_list[0].cam.position.x + sin(to_Radians(player_list[0].theta));
+            player_list[0].cam.target.z = player_list[0].cam.position.z + cos(to_Radians(player_list[0].theta));
         }
         if (IsKeyDown(KEY_A)){
-            player_list[0].theta += (offsetThisFrame*0.2);
-            player_list[0].cam.target.x = player_list[0].cam.position.x + sin(player_list[0].theta);
-            player_list[0].cam.target.z = player_list[0].cam.position.z + cos(player_list[0].theta);
+            player_list[0].theta += (offsetThisFrame*ROTATE_SPEED);
+            // I don't really think that the degree # needs to be a float, but it helps with the smooth scrolling
+            //printf("%.6f\n", player_list[0].theta);
+            if(player_list[0].theta > 360){player_list[0].theta=0;}
+            player_list[0].cam.target.x = player_list[0].cam.position.x + sin(to_Radians(player_list[0].theta));
+            player_list[0].cam.target.z = player_list[0].cam.position.z + cos(to_Radians(player_list[0].theta));
 
         }else if (IsKeyDown(KEY_D))
         {
 
-            player_list[0].theta -= (offsetThisFrame*0.2);
-            player_list[0].cam.target.x = player_list[0].cam.position.x + sin(player_list[0].theta);
-            player_list[0].cam.target.z = player_list[0].cam.position.z + cos(player_list[0].theta);
+            player_list[0].theta -= (offsetThisFrame*ROTATE_SPEED);
+            //printf("%.6f\n", player_list[0].theta);
+            if(player_list[0].theta < 0){player_list[0].theta=360;}
+            player_list[0].cam.target.x = player_list[0].cam.position.x + sin(to_Radians(player_list[0].theta));
+            player_list[0].cam.target.z = player_list[0].cam.position.z + cos(to_Radians(player_list[0].theta));
         }
 
 
@@ -328,29 +430,31 @@ float offsetThisFrame = 10.0f*GetFrameTime();
         // Move Player2 forward and backwards (no turning)
         if (IsKeyDown(KEY_UP))
         {
-            player_list[1].cam.position.z += PLAYER_SPEED*offsetThisFrame*cos(player_list[1].theta);
-            player_list[1].cam.position.x += PLAYER_SPEED*offsetThisFrame*sin(player_list[1].theta);
-            player_list[1].cam.target.x = player_list[1].cam.position.x + sin(player_list[1].theta);
-            player_list[1].cam.target.z = player_list[1].cam.position.z + cos(player_list[1].theta);
+            player_list[1].cam.position.z += PLAYER_SPEED*offsetThisFrame*cos(to_Radians(player_list[1].theta));
+            player_list[1].cam.position.x += PLAYER_SPEED*offsetThisFrame*sin(to_Radians(player_list[1].theta));
+            player_list[1].cam.target.x = player_list[1].cam.position.x + sin(to_Radians(player_list[1].theta));
+            player_list[1].cam.target.z = player_list[1].cam.position.z + cos(to_Radians(player_list[1].theta));
         }
         else if (IsKeyDown(KEY_DOWN))
         {
-            player_list[1].cam.position.z -= PLAYER_SPEED*offsetThisFrame*cos(player_list[1].theta);
-            player_list[1].cam.position.x -= PLAYER_SPEED*offsetThisFrame*sin(player_list[1].theta);
-            player_list[1].cam.target.x = player_list[1].cam.position.x + sin(player_list[1].theta);
-            player_list[1].cam.target.z = player_list[1].cam.position.z + cos(player_list[1].theta);
+            player_list[1].cam.position.z -= PLAYER_SPEED*offsetThisFrame*cos(to_Radians(player_list[1].theta));
+            player_list[1].cam.position.x -= PLAYER_SPEED*offsetThisFrame*sin(to_Radians(player_list[1].theta));
+            player_list[1].cam.target.x = player_list[1].cam.position.x + sin(to_Radians(player_list[1].theta));
+            player_list[1].cam.target.z = player_list[1].cam.position.z + cos(to_Radians(player_list[1].theta));
         }
         if (IsKeyDown(KEY_LEFT))
         {
-            player_list[1].theta += (offsetThisFrame*0.2);
-            player_list[1].cam.target.x = player_list[1].cam.position.x + sin(player_list[1].theta);
-            player_list[1].cam.target.z = player_list[1].cam.position.z + cos(player_list[1].theta);
+            player_list[1].theta += (offsetThisFrame*ROTATE_SPEED);
+            if(player_list[1].theta > 360){player_list[1].theta=0;}
+            player_list[1].cam.target.x = player_list[1].cam.position.x + sin(to_Radians(player_list[1].theta));
+            player_list[1].cam.target.z = player_list[1].cam.position.z + cos(to_Radians(player_list[1].theta));
 
         }else if (IsKeyDown(KEY_RIGHT))
         {
-            player_list[1].theta -= (offsetThisFrame*0.2);
-            player_list[1].cam.target.x = player_list[1].cam.position.x + sin(player_list[1].theta);
-            player_list[1].cam.target.z = player_list[1].cam.position.z + cos(player_list[1].theta);
+            player_list[1].theta -= (offsetThisFrame*ROTATE_SPEED);
+            if(player_list[1].theta < 0){player_list[1].theta=360;}
+            player_list[1].cam.target.x = player_list[1].cam.position.x + sin(to_Radians(player_list[1].theta));
+            player_list[1].cam.target.z = player_list[1].cam.position.z + cos(to_Radians(player_list[1].theta));
         }
         //----------------------------------------------------------------------------------
 

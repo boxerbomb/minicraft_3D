@@ -1,6 +1,37 @@
 #include <stdint.h>
 #include "raylib.h"
 
+
+// Game Variables
+#define WORLD_SIZE 256
+#define CHUNK_SIZE 16
+#define NUM_CHUNKS (WORLD_SIZE/CHUNK_SIZE)
+
+#define C_PI 3.14159
+
+
+// Player Variables
+#define NUM_PLAYERS 2
+#define PLAYER_SPEED 40
+#define ROTATE_SPEED 10.0
+#define PLAYER_WIDTH 16
+#define PLAYER_HEIGHT 16
+#define PLAYER_FOV 45.0f
+#define CHUNK_LOAD_FOV 60.0f
+// This is in pixels, not tile units
+#define VIEW_DISTANCE 640
+
+// Window Variables
+#define SCREEN_HEIGHT 800
+#define SCREEN_WIDTH 1600
+#define BLOCK_SIZE 16
+
+
+struct Position{
+	float x;
+	float y;
+};
+
 struct TileData{
 	int tile_index;
 	bool draw_3d;
@@ -16,14 +47,6 @@ struct PlayerData{
 };
 
 typedef uint8_t u8;
-
-#define NUM_PLAYERS 2
-#define PLAYER_SPEED 40
-
-#define SCREEN_HEIGHT 800
-#define SCREEN_WIDTH 1600
-
-#define WORLD_SIZE 128
 
 #define MENU_NONE 0
 #define MENU_TITLE 1
