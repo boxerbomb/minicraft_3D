@@ -52,6 +52,8 @@ struct PlayerData{
 	bool needsHotbarUpdate;
 
 	bool inventoryMode;
+
+	Texture2D body_texture;
 };
 
 typedef uint8_t u8;

@@ -28,6 +28,10 @@ struct TileData tile_data[NUM_TILES];
 Image hotbar_image;
 Texture2D hotbar_texture;
 
+
+Image player_0_image;
+Image player_1_image;
+
 struct PlayerData player_list[2];
 
 
@@ -154,7 +158,7 @@ void drawInventory(int player_id){
 
 
 // Scene drawing
-void DrawScene(RenderTexture *floor_texture)
+void DrawScene(RenderTexture *floor_texture, int player_id)
 {
     int count = 5;
     float spacing = 4;
@@ -202,6 +206,8 @@ void DrawScene(RenderTexture *floor_texture)
                                     DrawCubeTexture(tile_data[TILE_TREE].texture,(Vector3) { (actual_x*BLOCK_SIZE)+(BLOCK_SIZE/2), 15.0f, (actual_y*BLOCK_SIZE)+(BLOCK_SIZE/2) }, 0, -20, 20, WHITE);
                                 }else if(tile_index==TILE_CACTUS){
                                     DrawCubeTexture(tile_data[TILE_CACTUS_TRUNK].texture,(Vector3) { (actual_x*BLOCK_SIZE)+(BLOCK_SIZE/2), -1.0f, (actual_y*BLOCK_SIZE)+(BLOCK_SIZE/2) }, 6, BLOCK_SIZE, 6, WHITE);
+                                }else if(tile_index==TILE_FLOWER){
+                                    DrawBillboard(player_list[player_id].cam, tile_data[TILE_FLOWER].texture,(Vector3) { (actual_x*BLOCK_SIZE)+(BLOCK_SIZE/2), 0.1f, (actual_y*BLOCK_SIZE)+(BLOCK_SIZE/2) },BLOCK_SIZE,WHITE );
                                 }else{
                                     DrawCubeTexture(tile_data[tile_index].texture,(Vector3) { (actual_x*BLOCK_SIZE)+(BLOCK_SIZE/2), 0.1f, (actual_y*BLOCK_SIZE)+(BLOCK_SIZE/2) }, BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE, WHITE);
                                 }
@@ -218,8 +224,15 @@ void DrawScene(RenderTexture *floor_texture)
 
 
     // Draw a cube at each player's position
-    DrawCube(player_list[0].cam.position, PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_WIDTH, RED);
-    DrawCube(player_list[1].cam.position, PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_WIDTH, BLUE);
+    for(int i=0; i<NUM_PLAYERS; i++){
+        //Player is not the viewer
+        if(i != player_id){
+            DrawBillboard(player_list[player_id].cam, player_list[i].body_texture, player_list[i].cam.position,BLOCK_SIZE,WHITE );
+        }
+    }
+
+    //DrawCube(player_list[0].cam.position, PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_WIDTH, RED);
+    //DrawCube(player_list[1].cam.position, PLAYER_WIDTH, PLAYER_HEIGHT, PLAYER_WIDTH, BLUE);
 }
 
 void initNewMap() {
@@ -254,6 +267,14 @@ void setupPlayers(){
         player_list[i].screenHotbar = LoadRenderTexture(SCREEN_WIDTH/2, SCREEN_HEIGHT/10);
         player_list[i].needsHotbarUpdate = true;
 
+        if(i==0){
+            player_list[i].body_texture = LoadTextureFromImage(player_0_image);
+        }else if(i==1){
+            player_list[i].body_texture = LoadTextureFromImage(player_1_image);
+        }else{
+            printf("Error: Only Two Images for players already, maybe make a better system\n");
+        }
+
         player_list[i].theta = 0;
     }
 }
@@ -274,8 +295,16 @@ int main(void)
 
     RenderTexture floor_texture = LoadRenderTexture(WORLD_SIZE*BLOCK_SIZE, WORLD_SIZE*BLOCK_SIZE);
 
+    // This is shader code that allows for tranperencies to stack properly
+    // I am interested in the slowdown, it might only be worth it for entities
+    Shader alphaDiscard = LoadShader(NULL, "data/alphaDiscard.fs");
 
+
+    player_0_image = LoadImage("./res/dwarf_grey.png");
+    player_1_image = LoadImage("./res/dwarf_gold.png");
     setupPlayers();
+    UnloadImage(player_0_image);
+    UnloadImage(player_1_image);
 
     // This is the Rectangle representing the position and size of our 2-player split screen, this will need to be changed for 4-players
 	Rectangle splitScreenRect = { 0.0f, 0.0f, (float)player_list[0].screen.texture.width, (float)-player_list[0].screen.texture.height };
@@ -321,7 +350,6 @@ int main(void)
 
         // Needed to prevent Raylib from drawing textures upseide down
         ImageFlipVertical(&tile_images[i]);
-        new_tile_data.texture = LoadTextureFromImage(tile_images[i]);
 
         if(i==TILE_GRASS){
             new_tile_data.draw_3d = false;
@@ -340,6 +368,9 @@ int main(void)
         }else if(i==TILE_CACTUS){
             new_tile_data.draw_3d = true;
         }else if(i==TILE_FLOWER){
+            // Flowers are actually drawn as a Billboard, so we flip it again to make it right-side-up
+            // This is done only once so I am not to worried about the preformance
+            ImageFlipVertical(&tile_images[i]);
             new_tile_data.draw_3d = true;
         }else if(i==TILE_IRONORE){
             new_tile_data.draw_3d = true;
@@ -372,6 +403,9 @@ int main(void)
         }else{
             printf("ERROR\n");
         }
+
+
+        new_tile_data.texture = LoadTextureFromImage(tile_images[i]);
 
         tile_data[i] = new_tile_data;
 
@@ -433,7 +467,9 @@ int main(void)
     while (!WindowShouldClose())    // Detect window close button or ESC key
     {
 
-
+        //printf("Check out this link, to see if billboards, slow down flowers, if not, at least use this for player sprites and enimies\n");
+        //printf("https://bedroomcoders.co.uk/raylib-billboards-advanced-use/\n");
+        //printf("\n");
 
         // Update
         //----------------------------------------------------------------------------------
@@ -516,12 +552,14 @@ int main(void)
         //----------------------------------------------------------------------------------
 
 
+        //Begin the transparent ordering value shader
+        BeginShaderMode(alphaDiscard);
 
         // Draw Player1 view to the render texture
         BeginTextureMode(player_list[0].screen);
             ClearBackground(SKYBLUE);
             BeginMode3D(player_list[0].cam);
-                DrawScene(&floor_texture);
+                DrawScene(&floor_texture,0);
             EndMode3D();
             //DrawText("PLAYER1 W/S to move", 10, 10, 20, RED);
             DrawFPS(10, 10);  
@@ -531,10 +569,15 @@ int main(void)
         BeginTextureMode(player_list[1].screen);
             ClearBackground(SKYBLUE);
             BeginMode3D(player_list[1].cam);
-                DrawScene(&floor_texture);
+                DrawScene(&floor_texture,1);
             EndMode3D();
             //DrawText("PLAYER2 UP/DOWN to move", 10, 10, 20, BLUE);
         EndTextureMode();
+
+        //Draw Entities
+
+        // ENd the shader mode, it should not be needed past this
+        EndShaderMode();
 
 
         // Draw to the relevant screens only if nessesary
