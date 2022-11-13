@@ -27,6 +27,8 @@
 #define BLOCK_SIZE 16
 
 
+#define CHUNK_REFRESH_LIMIT 1/15.0
+
 struct Position{
 	float x;
 	float y;
@@ -44,6 +46,12 @@ struct PlayerData{
 	Color playerColor;
 	float theta;
 	RenderTexture screen;
+	RenderTexture screenUI;
+
+	RenderTexture screenHotbar;
+	bool needsHotbarUpdate;
+
+	bool inventoryMode;
 };
 
 typedef uint8_t u8;

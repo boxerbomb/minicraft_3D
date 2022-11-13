@@ -25,6 +25,9 @@ Image tile_images[NUM_TILES];
 Texture2D tile_textures[NUM_TILES];
 struct TileData tile_data[NUM_TILES];
 
+Image hotbar_image;
+Texture2D hotbar_texture;
+
 struct PlayerData player_list[2];
 
 
@@ -32,6 +35,9 @@ struct PlayerData player_list[2];
 // Globals for map data
 u8 map[5][WORLD_SIZE*WORLD_SIZE];
 u8 data[5][WORLD_SIZE*WORLD_SIZE];
+
+// NUM_CHUNKS is actually NUM_CHUNKS in one direction
+bool drawChunk[NUM_CHUNKS*NUM_CHUNKS];
 
 
 bool FindPoint(int x1, int y1, int x2, int y2, int x, int y)
@@ -118,6 +124,35 @@ bool renderChunk(struct Position chunk_pos){
     return isSeen;
 }
 
+void checkVisibleChunks(){
+    for(int y=0; y<NUM_CHUNKS; y++){
+        for(int x=0; x<NUM_CHUNKS; x++){
+            struct Position chunkPos = {x,y};
+            drawChunk[(y*NUM_CHUNKS)+x] = renderChunk(chunkPos);
+        }
+    }
+}
+
+
+void drawHotbar(int player_id){
+    DrawTexture(hotbar_texture, 0, 0, WHITE);
+}
+
+void drawInventory(int player_id){
+    int gap = 16;
+    int item_size = 64;
+    int x_offset = 400;
+    int y_offset = 400;
+
+    for(int y=0; y<5; y++){
+        for(int x=0; x<5; x++){
+            DrawRectangle(x*(item_size+gap)+x_offset,y*(item_size+gap)+y_offset,item_size,item_size,(Color){156, 147, 128,255});
+        }
+    }
+
+}
+
+
 // Scene drawing
 void DrawScene(RenderTexture *floor_texture)
 {
@@ -135,11 +170,10 @@ void DrawScene(RenderTexture *floor_texture)
     //DrawPlane((Vector3){ SCREEN_WIDTH/2, -8.0f, SCREEN_HEIGHT/2 }, (Vector2){ WORLD_SIZE*16, WORLD_SIZE*16 }, BEIGE); // Simple world plane
     DrawCubeTexture(floor_texture->texture,(Vector3) { (WORLD_SIZE*BLOCK_SIZE)/2, -8.0f, (WORLD_SIZE*BLOCK_SIZE)/2 }, WORLD_SIZE*BLOCK_SIZE, 0, WORLD_SIZE*BLOCK_SIZE, WHITE);
 
-
         for(int y=0; y<NUM_CHUNKS; y++){
             for(int x=0; x<NUM_CHUNKS; x++){
-                struct Position chunkPos = {x,y};
-                if(renderChunk(chunkPos)){
+                //struct Position chunkPos = {x,y};
+                if(drawChunk[(y*NUM_CHUNKS)+x]==true){
                     for(int ay=0; ay<CHUNK_SIZE; ay++){
                         for(int ax=0; ax<CHUNK_SIZE; ax++){
 
@@ -210,11 +244,15 @@ void setupPlayers(){
         player_list[i].cam.target.y = 1.0f;
         player_list[i].cam.position.z = -3.0f;
         player_list[i].cam.position.y = 1.0f;
+        player_list[i].inventoryMode = false;
 
         // This is the canvas that the players screen will be drawn on
         // These are screen sizes not screen position
         // 4 player will require different sized screens
         player_list[i].screen = LoadRenderTexture(SCREEN_WIDTH/2, SCREEN_HEIGHT);
+        player_list[i].screenUI = LoadRenderTexture(SCREEN_WIDTH/2, SCREEN_HEIGHT);
+        player_list[i].screenHotbar = LoadRenderTexture(SCREEN_WIDTH/2, SCREEN_HEIGHT/10);
+        player_list[i].needsHotbarUpdate = true;
 
         player_list[i].theta = 0;
     }
@@ -228,6 +266,8 @@ int main(void)
     // Initialization
     //--------------------------------------------------------------------------------------
 
+
+    float CHUNK_REFRESH_COUNT = 0.0;
 
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Minicraft 3D");
 
@@ -267,6 +307,11 @@ int main(void)
     tile_images[TILE_HOLE] = LoadImage("./res/hole.png");
     tile_images[TILE_TREE_TRUNK] = LoadImage("./res/tree_trunk.png");
     tile_images[TILE_CACTUS_TRUNK] = LoadImage("./res/cactus_trunk.png");
+
+    hotbar_image = LoadImage("./res/hotbar.png");
+    ImageResize(&hotbar_image,SCREEN_WIDTH/2,SCREEN_HEIGHT/10);
+    hotbar_texture = LoadTextureFromImage(hotbar_image);
+    UnloadImage(hotbar_image);
 
 
     for(int i=0; i<NUM_TILES; i++){
@@ -373,7 +418,6 @@ int main(void)
     for(int y=0; y<WORLD_SIZE; y++){
         for(int x=0; x<WORLD_SIZE; x++){
             u8 tile_index = map[1][((y)*WORLD_SIZE)+(x)];
-
             // Only Draw the texture to the floor, if it is a floor tile and not a 3D object
             if(tile_data[tile_index].draw_3d==false){
                 DrawTexture(tile_textures[tile_index], x*BLOCK_SIZE, y*BLOCK_SIZE, WHITE);
@@ -388,9 +432,22 @@ int main(void)
     // Main game loop
     while (!WindowShouldClose())    // Detect window close button or ESC key
     {
+
+
+
         // Update
         //----------------------------------------------------------------------------------
-float offsetThisFrame = 10.0f*GetFrameTime();
+        float offsetThisFrame = 10.0f*GetFrameTime();
+
+
+        // Temporarily the 'I' key will open both inventories, just for testing
+        if (IsKeyDown(KEY_I))
+        {
+            player_list[0].inventoryMode = true;
+            player_list[1].inventoryMode = true;
+        }
+
+
 
         // Move Player1 forward and backwards (no turning)
         if (IsKeyDown(KEY_W))
@@ -479,12 +536,62 @@ float offsetThisFrame = 10.0f*GetFrameTime();
             //DrawText("PLAYER2 UP/DOWN to move", 10, 10, 20, BLUE);
         EndTextureMode();
 
+
+        // Draw to the relevant screens only if nessesary
+        if(player_list[0].inventoryMode == true){
+            BeginTextureMode(player_list[0].screenUI);
+            drawInventory(0);
+            EndTextureMode();
+        }
+        if(player_list[1].inventoryMode == true){
+            BeginTextureMode(player_list[1].screenUI);
+            drawInventory(1);
+            EndTextureMode();
+        }
+
+
+
+        // This is the hotbar, it might be a bit graohically intensive so I would only change the texture when needed
+        // if the person gains XP, takes damage, or changes weapon a HOTBAR UPDATE could go true;
+        if(player_list[0].needsHotbarUpdate==true){
+            BeginTextureMode(player_list[0].screenHotbar);
+            drawHotbar(0);
+            EndTextureMode();
+            player_list[0].needsHotbarUpdate = false;
+        }
+        if(player_list[1].needsHotbarUpdate==true){
+            BeginTextureMode(player_list[1].screenHotbar);
+            drawHotbar(1);
+            EndTextureMode();
+            player_list[1].needsHotbarUpdate = false;
+        }
+
+
+
         // Draw both views render textures to the screen side by side
         BeginDrawing();
             ClearBackground(BLACK);
             DrawTextureRec(player_list[0].screen.texture, splitScreenRect, (Vector2){ 0, 0 }, WHITE);
             DrawTextureRec(player_list[1].screen.texture, splitScreenRect, (Vector2){ SCREEN_WIDTH/2.0f, 0 }, WHITE);
+
+            // Draw the Inventory to the screen
+            if(player_list[0].inventoryMode == true){DrawTextureRec(player_list[0].screenUI.texture, splitScreenRect, (Vector2){ 0, 0 }, WHITE);}
+            if(player_list[1].inventoryMode == true){DrawTextureRec(player_list[1].screenUI.texture, splitScreenRect, (Vector2){ SCREEN_WIDTH/2.0f, 0 }, WHITE);}
+
+
+            DrawTextureRec(player_list[0].screenHotbar.texture, splitScreenRect, (Vector2){ 0, SCREEN_HEIGHT-(SCREEN_HEIGHT/10) }, WHITE);
+            DrawTextureRec(player_list[1].screenHotbar.texture, splitScreenRect, (Vector2){ SCREEN_WIDTH/2.0f, SCREEN_HEIGHT-(SCREEN_HEIGHT/10) }, WHITE);
+
         EndDrawing();
+
+
+
+        // Do math for which chunks are visible every 1/CHUNK_REFRESH seconds?
+        CHUNK_REFRESH_COUNT+=offsetThisFrame;
+        if(CHUNK_REFRESH_COUNT > CHUNK_REFRESH_LIMIT){
+            checkVisibleChunks();
+            CHUNK_REFRESH_COUNT = 0.0;
+        } 
 
 
     }
